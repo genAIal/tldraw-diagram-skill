@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>tldraw render harness</title>
+  <link rel="stylesheet" href="https://esm.sh/tldraw@3/tldraw.css" />
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #ffffff; }
+    #root { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import React from 'https://esm.sh/react@18.3.1'
+    import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client?deps=react@18.3.1'
+    import {
+      Tldraw,
+      exportToBlob,
+    } from 'https://esm.sh/tldraw@3?deps=react@18.3.1,react-dom@18.3.1'
+
+    window.__editorReady = false
+    window.__lastError = null
+
+    let editorRef = null
+
+    const onMount = (editor) => {
+      editorRef = editor
+      window.__editor = editor
+      window.__editorReady = true
+    }
+
+    const App = () => React.createElement(Tldraw, { onMount, hideUi: true })
+    createRoot(document.getElementById('root')).render(React.createElement(App))
+
+    window.__renderTldr = async (tldrJson, opts = {}) => {
+      try {
+        if (!editorRef) throw new Error('editor not ready')
+        const editor = editorRef
+        const records = Array.isArray(tldrJson.records) ? tldrJson.records : []
+        const shapes = records.filter((r) => r && r.typeName === 'shape')
+        const bindings = records.filter((r) => r && r.typeName === 'binding')
+
+        // Remap page:page (the convention used by hand-authored .tldr files) to whatever
+        // the fresh editor's current page id is. This keeps the source files portable.
+        const currentPageId = editor.getCurrentPageId()
+
+        // Adapt shapes for the local tldraw version:
+        // - Arrow shapes: convert richText back to text (v4→v3 compat)
+        // - Note shapes: remove textFirstEditedBy (v4-only prop)
+        const shapeInputs = shapes.map((s) => {
+          const props = { ...s.props }
+
+          if (s.type === 'arrow' && props.richText && !('text' in props)) {
+            // Extract plain text from richText
+            const rt = props.richText
+            let text = ''
+            if (rt && rt.content) {
+              text = rt.content
+                .map(p => (p.content || []).map(t => t.text || '').join(''))
+                .join('\n')
+            }
+            props.text = text
+            delete props.richText
+          }
+
+          if (s.type === 'note') {
+            delete props.textFirstEditedBy
+          }
+
+          return {
+            id: s.id,
+            type: s.type,
+            x: s.x,
+            y: s.y,
+            rotation: s.rotation ?? 0,
+            index: s.index,
+            parentId: s.parentId === 'page:page' ? currentPageId : s.parentId,
+            isLocked: s.isLocked ?? false,
+            opacity: s.opacity ?? 1,
+            props,
+            meta: s.meta ?? {},
+          }
+        })
+
+        if (shapeInputs.length) editor.createShapes(shapeInputs)
+
+        // Strip snap prop from bindings (v4-only)
+        const bindingInputs = bindings.map((b) => {
+          const props = { ...b.props }
+          delete props.snap
+          return {
+            id: b.id,
+            type: b.type,
+            fromId: b.fromId,
+            toId: b.toId,
+            props,
+            meta: b.meta ?? {},
+          }
+        })
+
+        if (bindingInputs.length) editor.createBindings(bindingInputs)
+
+        // Give tldraw a tick to lay out
+        await new Promise((r) => setTimeout(r, 250))
+
+        const ids = [...editor.getCurrentPageShapeIds()]
+        if (ids.length === 0) throw new Error('no shapes on current page after load')
+
+        const blob = await exportToBlob({
+          editor,
+          ids,
+          format: opts.format || 'png',
+          opts: {
+            background: opts.background !== false,
+            padding: opts.padding ?? 32,
+            scale: opts.scale ?? 2,
+          },
+        })
+
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result)
+          reader.onerror = () => reject(reader.error)
+          reader.readAsDataURL(blob)
+        })
+        return dataUrl
+      } catch (e) {
+        window.__lastError = String(e && e.stack || e)
+        throw e
+      }
+    }
+  </script>
+</body>
+</html>

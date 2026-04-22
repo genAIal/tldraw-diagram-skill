@@ -1,0 +1,11 @@
+[project]
+name = "tldraw-renderer"
+version = "0.1.0"
+description = "Headless render harness for tldraw .tldr files via Playwright + esm.sh"
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.47",
+]
+
+[tool.uv]
+package = false
