@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>tldraw render harness</title>
-  <link rel="stylesheet" href="https://esm.sh/tldraw@3/tldraw.css" />
+  <link rel="stylesheet" href="https://esm.sh/tldraw@3.15.6/tldraw.css" />
   <style>
     html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #ffffff; }
     #root { position: fixed; inset: 0; }
@@ -17,7 +17,7 @@
     import {
       Tldraw,
       exportToBlob,
-    } from 'https://esm.sh/tldraw@3?deps=react@18.3.1,react-dom@18.3.1'
+    } from 'https://esm.sh/tldraw@3.15.6?deps=react@18.3.1,react-dom@18.3.1'
 
     window.__editorReady = false
     window.__lastError = null
@@ -48,8 +48,31 @@
         // Adapt shapes for the local tldraw version:
         // - Arrow shapes: convert richText back to text (v4→v3 compat)
         // - Note shapes: remove textFirstEditedBy (v4-only prop)
+        // - richText: strip `attrs.dir` (v4-only ProseMirror prop)
+        const stripRichTextAttrs = (rt) => {
+          if (!rt || typeof rt !== 'object') return rt
+          if (rt.attrs) delete rt.attrs
+          if (Array.isArray(rt.content)) {
+            for (const c of rt.content) {
+              if (c && typeof c === 'object') {
+                if (c.attrs) delete c.attrs
+                if (Array.isArray(c.content)) {
+                  for (const t of c.content) {
+                    if (t && t.attrs) delete t.attrs
+                  }
+                }
+              }
+            }
+          }
+          return rt
+        }
+
         const shapeInputs = shapes.map((s) => {
           const props = { ...s.props }
+
+          if (props.richText) {
+            props.richText = stripRichTextAttrs(JSON.parse(JSON.stringify(props.richText)))
+          }
 
           if (s.type === 'arrow' && props.richText && !('text' in props)) {
             // Extract plain text from richText

@@ -160,9 +160,9 @@ Every color choice pulls from `references/color-palette.md`. tldraw's palette is
 | `fill` | `solid` | `semi` for subtle emphasis, `none` for outline-only, `pattern` for texture |
 | `color` | `black` | Pull from palette based on semantic purpose |
 
-Default to `font: 'draw'` and `dash: 'draw'` only if the user wants the classic tldraw hand-drawn aesthetic. For technical/professional diagrams use `font: 'sans'`, `dash: 'solid'`, and **`fill: 'solid'`** — shapes without fills look like wireframes and are hard to read. Follow the Excalidraw principle: lighter fill + darker stroke for contrast.
+Default to `font: 'draw'` and `dash: 'draw'` only if the user wants the classic tldraw hand-drawn aesthetic. For technical/professional diagrams use `font: 'sans'`, `dash: 'solid'`, and **`fill: 'solid'`** — shapes without fills look like wireframes and are hard to read. Follow the principle: lighter fill + darker stroke for contrast.
 
-**Arrow kind**: Default to `kind: 'elbow'` (right-angle connections) for flowcharts and technical diagrams. Use `'arc'` only when you need curved arrows, `'line'` for straight diagonal connections.
+**Arrow kind**: Only `'elbow'` and `'arc'` exist — there is **no** `'line'` kind (it throws a `ValidationError` that aborts the entire render). Default to `kind: 'elbow'` (right-angle connections) for flowcharts. For straight diagonal connections use `kind: 'arc'` with `bend: 0`.
 
 ---
 
@@ -186,6 +186,33 @@ For vertical flowcharts, pick a center x-coordinate and align all main-flow shap
 
 ### Connections Required
 Position alone doesn't show relationships. If A relates to B, draw an `arrow`. For `.tldr` files, arrows can bind to shapes via a `binding` record — see `references/json-schema.md`. Use `normalizedAnchor: {x: 0.5, y: 0.5}` and `isPrecise: false` so tldraw auto-routes to the nearest edge midpoint.
+
+---
+
+## Multi-Zoom Architecture (Comprehensive Diagrams)
+
+Comprehensive diagrams operate at three zoom levels simultaneously — like a map showing country borders AND street names:
+
+1. **Summary flow** — a compact overview strip at the top (e.g. a `line` shape with small ellipse markers and free-floating `text` labels) showing the whole pipeline at a glance.
+2. **Section boundaries** — labeled regions grouping related shapes (phases, layers, swimlanes). Use a `frame`, or a large outline-only `geo` rectangle (`fill: none`, `color: grey`, lowest `index`) when arrows must pass through the region freely.
+3. **Detail inside sections** — evidence artifacts (`note` shapes with `font: mono`), concrete examples, real names from specs.
+
+Aim for all three levels in technical/teaching diagrams. The summary gives context, the sections organize, the details teach.
+
+---
+
+## Hard-Won Gotchas (verified against the local renderer)
+
+- **Arrow `kind`**: only `"arc"` and `"elbow"` are valid — `"line"` throws a `ValidationError` that aborts the whole render. Straight diagonal = `arc` + `bend: 0`.
+- **Frame children are frame-relative**: a shape with `parentId: "shape:<frame-id>"` positions its `x`/`y` relative to the frame's top-left corner, not the page. Convert coordinates when parenting shapes into frames — or keep everything page-level and use an outline-only `geo` rectangle as the section boundary instead (avoids clipping and coordinate conversion when arrows cross the border).
+- **Arrow labels need room**: a label on a bound arrow visually swallows the line when the bound shapes are closer than ~150–200px apart. Give labeled arrows ≥200px of distance, or drop the arrow label and place a free-floating `text` beside the arrow instead.
+- **`index` is per-parent**: fractional indices must be unique within the same `parentId`. The page and each frame are separate namespaces — keep one counter per parent.
+- **`yellow` renders as pale cream with an orange stroke** — visually close to `orange`. Don't rely on yellow-vs-orange to encode two different meanings in the same diagram.
+- **No waypoints on arrows**: tldraw arrows have only start/end (plus `elbowMidPoint`/`bend`). Long routed connections around content can't be hand-waypointed like in other tools — route via elbow arrows bound to specific edges (`normalizedAnchor` on the side you want, `isPrecise: true`), or accept a simpler path.
+- **Author in the current tldraw.com v4 format** (as documented in `references/json-schema.md`); the render harness auto-converts for its local engine (arrow `richText`→`text`, note `textFirstEditedBy` stripped, binding `snap` stripped). Never hand-convert to older formats.
+- **Never use `autoSize: true` on hand-authored `text` shapes**: neither the renderer nor tldraw's import recomputes `w`/`h`, so text wraps at whatever `w` you gave it AND gets clipped vertically to roughly one line. Always set `autoSize: false` with a generous explicit `w` (rule of thumb: char count × fontSize × 0.62, plus ~30% headroom; sizes are s=18, m=24, l=36, xl=44 px before `scale`). With `autoSize: false` the height is computed correctly from the wrapped content.
+- **`fill: "fill"` is valid and gives saturated (non-pastel) fill** — use it for small marker dots (traffic lights, timeline points), which look washed-out with `solid`. Keep `solid` for large shapes where pastel + colored stroke is the intended look.
+- **Elbow outside-routing hugs the shapes**: with side-to-side precise anchors (e.g. right edge → right edge), the vertical pass runs only ~70–80px beyond the outermost bound edge — clear that corridor of other shapes, or narrow them. For near-collinear elbow connections, place the precise anchor exactly on the start line (compute the fraction) or you get a small ugly jog.
 
 ---
 

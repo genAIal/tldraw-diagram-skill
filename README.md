@@ -2,6 +2,8 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that generates [tldraw](https://tldraw.com) diagrams — either as `.tldr` files (importable into tldraw.com) or as tldraw SDK code snippets (`editor.createShapes(...)`).
 
+> **Unofficial community project.** This skill is not affiliated with, endorsed by, or supported by tldraw Inc. "tldraw" is used purely to describe compatibility with the tldraw file format and SDK.
+
 **Philosophy: Diagrams should argue visually**, not just display information. The skill designs each diagram around visual patterns (fan-out, convergence, timeline, cycle) rather than uniform card grids.
 
 ## What it does
@@ -60,6 +62,7 @@ tldraw/
     json-schema.md                 # .tldr file format reference
     render_template.html           # Headless harness: tldraw via esm.sh
     render_tldraw.py               # Playwright-based .tldr -> PNG renderer
+    render_svg.py                  # Same harness, exports SVG (vector) instead
     pyproject.toml                 # uv-managed Python deps
 ```
 
@@ -93,4 +96,6 @@ tldraw's palette is fixed (`black`, `blue`, `green`, `red`, `orange`, `violet`, 
 
 ## License
 
-[MIT](LICENSE)
+This skill — its documentation, templates, and renderer scripts — is licensed under [MIT](LICENSE).
+
+**Note on tldraw itself:** The tldraw SDK is **not** MIT-licensed — it is source-available under its own [tldraw license](https://tldraw.dev/community/license). This skill does not redistribute any tldraw code; the headless renderer only loads tldraw at runtime from esm.sh, which is free under the SDK's default terms for development use (the renderer is a local development tool). If you embed tldraw in a production or commercial application, you need your own license from tldraw: a free hobby license (with the "made with tldraw" watermark) or a commercial license — see [tldraw.dev/pricing](https://tldraw.dev/pricing). Opening generated `.tldr` files in the [tldraw.com](https://www.tldraw.com) web app is free.

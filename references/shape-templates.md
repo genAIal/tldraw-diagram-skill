@@ -93,7 +93,7 @@ Colored background, great for evidence artifacts, callouts, quotes.
   "growY": 0,
   "url": "",
   "scale": 1,
-  "fontSizeAdjustment": 1,
+  "fontSizeAdjustment": 0,
   "textFirstEditedBy": null,
   "richText": {
     "type": "doc",
@@ -137,7 +137,7 @@ See `json-schema.md` for bindings (how to make an arrow stick to a shape).
 
 Arrow labels use `richText` (ProseMirror format), same as geo/text/note shapes. For a labeled arrow use `{"type": "paragraph", "content": [{"type": "text", "text": "Label"}]}`. For no label, use an empty paragraph: `{"type": "paragraph"}`.
 
-**`kind`**: `elbow` (right-angle, default — best for flowcharts), `arc` (curved), `line` (straight).
+**`kind`**: only two values exist — `elbow` (right-angle, best for flowcharts) and `arc` (curved; `bend: 0` gives a straight diagonal). There is **no** `line` kind — it throws a `ValidationError` that aborts the render.
 **`arrowheadStart` / `arrowheadEnd`**: `none`, `arrow`, `triangle`, `square`, `dot`, `diamond`, `pipe`, `bar`, `inverted`.
 **`bend`**: positive number curves the arrow clockwise; negative counterclockwise. `0` = straight (only applies when `kind: "arc"`).
 **`labelPosition`**: `0..1`, fraction along the arrow where the label sits.
