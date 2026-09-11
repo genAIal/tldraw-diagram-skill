@@ -206,7 +206,9 @@ Aim for all three levels in technical/teaching diagrams. The summary gives conte
 - **Arrow `kind`**: only `"arc"` and `"elbow"` are valid — `"line"` throws a `ValidationError` that aborts the whole render. Straight diagonal = `arc` + `bend: 0`.
 - **Frame children are frame-relative**: a shape with `parentId: "shape:<frame-id>"` positions its `x`/`y` relative to the frame's top-left corner, not the page. Convert coordinates when parenting shapes into frames — or keep everything page-level and use an outline-only `geo` rectangle as the section boundary instead (avoids clipping and coordinate conversion when arrows cross the border).
 - **Arrow labels need room**: a label on a bound arrow visually swallows the line when the bound shapes are closer than ~150–200px apart. Give labeled arrows ≥200px of distance, or drop the arrow label and place a free-floating `text` beside the arrow instead.
-- **`index` is per-parent**: fractional indices must be unique within the same `parentId`. The page and each frame are separate namespaces — keep one counter per parent.
+- **`index` is a fractional index, not a counter**: valid keys are `a1`…`a9`, then `aA`…`aZ`, then `aa`…`az` (base62 after the leading `a`). A plain counter produces `a10`, `a20`, … — and a fractional part must never end in `0`. tldraw.com rejects such a key with `At shape(type = geo).index: Expected an index key, got "a10"`, and **one bad record aborts the whole import**: you get an empty document with no error message. The local renderer never checks this, so the PNG looks perfect. With more than 61 shapes under one parent, go two digits (`b10`, `b11`, …).
+- **`index` is also per-parent**: keys must be unique within the same `parentId`. The page and each frame are separate namespaces — keep one counter per parent.
+- **`fontSizeAdjustment` on `note` is a scale factor, not a pixel size**: use `1`. tldraw normally computes it in `onBeforeCreate`, but loading a finished file skips that step, so a stored `0` renders the label at zero size — the sticky note appears blank while its text sits untouched in the JSON.
 - **`yellow` renders as pale cream with an orange stroke** — visually close to `orange`. Don't rely on yellow-vs-orange to encode two different meanings in the same diagram.
 - **No waypoints on arrows**: tldraw arrows have only start/end (plus `elbowMidPoint`/`bend`). Long routed connections around content can't be hand-waypointed like in other tools — route via elbow arrows bound to specific edges (`normalizedAnchor` on the side you want, `isPrecise: true`), or accept a simpler path.
 - **Author in the current tldraw.com v4 format** (as documented in `references/json-schema.md`); the render harness auto-converts for its local engine (arrow `richText`→`text`, note `textFirstEditedBy` stripped, binding `snap` stripped). Never hand-convert to older formats.
@@ -255,7 +257,19 @@ For comprehensive diagrams, **build the records array one section at a time.** A
 
 You cannot judge a diagram from JSON alone. After generating or editing a `.tldr`, render it to PNG, view the image, and fix what you see — in a loop until it's right.
 
-### How to Render
+### Step 1: Validate the file (cheap, catches silent import failures)
+
+```bash
+cd references && uv run python validate_tldr.py <path-to-file.tldr>
+```
+
+Run this **before** rendering. It checks what the renderer cannot: index keys, per-parent
+uniqueness, `fontSizeAdjustment` on notes, bindings pointing at real shapes, arrow `kind`.
+These are exactly the faults that make tldraw.com refuse a file **silently** — the user opens
+it and gets an empty canvas, with no error anywhere. Exit code 1 means errors; hints don't
+change it.
+
+### Step 2: Render & view
 
 ```bash
 cd references && uv run python render_tldraw.py <path-to-file.tldr>
@@ -289,6 +303,42 @@ The renderer works by launching headless Chromium, loading `render_template.html
 ### Alternative: User opens in the tldraw web app
 If the headless renderer can't reach esm.sh (offline, restricted network), fall back to: *"Open [tldraw.com](https://tldraw.com) → File → Open → pick the `.tldr` file."*
 
+### Validate against the target (the renderer is not an import test)
+
+**A clean PNG does not mean the file opens.** The renderer runs tldraw v3 and builds the
+document through `editor.createShapes` — a path that never validates index keys and computes
+note font scaling itself. tldraw.com instead *imports* the file and validates every record.
+Both faults documented in the gotchas above rendered flawlessly and produced an empty document
+on tldraw.com.
+
+`validate_tldr.py` covers the faults decidable without a browser. When you need certainty — or
+a fault it doesn't know — use the target's own live schema:
+
+1. Open tldraw.com in a browser and let it finish loading. The app exposes `window.editor`.
+2. Run each record through the real migration and validation:
+
+```js
+const e = window.editor, schema = e.store.schema;
+const file = /* the parsed .tldr */;
+const bad = [];
+for (const rec of file.records) {
+  const m = schema.migratePersistedRecord(rec, file.schema, 'up');
+  if (m.type === 'error') { bad.push({ id: rec.id, stage: 'migrate', reason: m.reason }); continue; }
+  try { schema.validateRecord(e.store, m.value, 'createRecord', null); }
+  catch (err) { bad.push({ id: rec.id, stage: 'validate', msg: String(err.message) }); }
+}
+bad
+```
+
+The validator names the record and the prop in plain text, where the import itself just fails
+quietly. To see the result, `e.loadSnapshot({document: {schema: file.schema, store:
+Object.fromEntries(file.records.map(r => [r.id, r]))}})` on a scratch file.
+
+**Two traps when doing this.** Don't build your own schema with `createTLSchema()` from a CDN
+copy of the library — a version mismatch reports `migrationFailed` for perfectly valid files.
+And don't judge a rig by one result: run it against a file the target itself exported. If that
+one fails too, the rig is broken, not the file.
+
 ### Version Compatibility
 The local renderer uses tldraw v3 (via esm.sh), while tldraw.com runs v4+. The renderer's `__renderTldr` function automatically converts v4 props (arrow `richText` → `text`, strips `textFirstEditedBy` from notes, strips `snap` from bindings) so files authored for tldraw.com also render locally. **Always author files using the current tldraw.com format** (described in `references/json-schema.md`). The renderer handles backward compat automatically.
 
@@ -311,6 +361,11 @@ with sync_playwright() as p:
 Replace `'arrow'` with the shape type you need defaults for.
 
 ### First-Time Setup
+
+Run this **once per machine, before authoring anything** — `playwright` being importable does
+not mean its browser is downloaded, and you don't want to discover that after building 40
+shapes:
+
 ```bash
 cd references
 uv sync
@@ -348,7 +403,10 @@ uv run playwright install chromium
 16. Hero elements larger and more isolated
 
 ### Technical
-17. `.tldr` file has `tldrawFileFormatVersion`, valid `schema`, and `records` array
-18. Exactly one `document` record and at least one `page` record
-19. Shape `parentId` points to a valid page or frame
-20. Every binding references existing shape IDs
+17. `validate_tldr.py` run and clean (exit 0) — before judging the PNG
+18. Index keys are `a1`…`a9`, `aA`…`aZ`, `aa`…`az`, never ending in `0`
+19. Every `note` has `fontSizeAdjustment: 1`, not `0`
+20. `.tldr` file has `tldrawFileFormatVersion`, valid `schema`, and `records` array
+21. Exactly one `document` record and at least one `page` record
+22. Shape `parentId` points to a valid page or frame
+23. Every binding references existing shape IDs

@@ -85,7 +85,7 @@ Exactly one `document` record per file. `id` is always `"document:document"`.
 }
 ```
 
-At least one `page` record. `index` is a fractional index string (`"a1"`, `"a2"`, etc. — use `"a1"` for a single-page doc). Shape `parentId`s point at this page's `id`.
+At least one `page` record. `index` is a fractional index key (`"a1"`, `"a2"`, … — use `"a1"` for a single-page doc); the same rules as for shapes apply, see below. Shape `parentId`s point at this page's `id`.
 
 ---
 
@@ -115,7 +115,19 @@ Field notes:
 - **`type`**: one of `geo`, `text`, `note`, `arrow`, `line`, `draw`, `frame`, `group`, `image`, `video`, `bookmark`, `embed`, `highlight`.
 - **`x` / `y`**: top-left position in the page's coordinate system. Units = px.
 - **`rotation`**: radians. Leave `0` unless you mean it.
-- **`index`**: fractional index for z-order within the parent. `"a1"` < `"a2"` < `"a3"`. When in doubt, give each shape a distinct `"aN"` in creation order.
+- **`index`**: fractional index key for z-order within the parent — **not a counter**.
+  Valid keys run `a1`…`a9`, then `aA`…`aZ`, then `aa`…`az` (base62 after the leading `a`),
+  giving 61 slots per parent; beyond that go two digits (`b10`, `b11`, …). A fractional part
+  must **never end in `0`**, so naive numbering breaks at the tenth shape: tldraw rejects
+  `a10` with `At shape(type = geo).index: Expected an index key, got "a10"`, and a single bad
+  record aborts the entire import — the user sees an empty document, no error. The local PNG
+  renderer does not check this, so a perfect render proves nothing here. Generate keys like:
+
+  ```python
+  B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  def index_key(n):        # n starts at 1, one counter per parentId
+      return "a" + B62[n]  # a1, a2, ... a9, aA, aB, ... aZ, aa, ... az
+  ```
 - **`parentId`**: usually the page id (`"page:page"`). For a shape inside a frame, use the frame's `id`.
 - **`props`**: shape-specific — see `shape-templates.md`.
 
@@ -135,7 +147,7 @@ An `arrow` shape's `start` / `end` props carry coordinates. To make an arrow **s
   "x": 0,
   "y": 0,
   "rotation": 0,
-  "index": "a10",
+  "index": "aA",
   "parentId": "page:page",
   "isLocked": false,
   "opacity": 1,
