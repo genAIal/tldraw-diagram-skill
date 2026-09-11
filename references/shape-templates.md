@@ -1,6 +1,8 @@
 # tldraw Shape Templates
 
-Copy-paste templates for each shape type. Pull colors and style tokens from `color-palette.md`. Wrap each in the standard shape envelope from `json-schema.md`:
+Copy-paste templates for each shape type. Pull colors and style tokens from `color-palette.md`. Wrap each in the standard shape envelope from `json-schema.md`. Note the `index`: it is a
+fractional index key (`a1`…`a9`, `aA`…`aZ`, `aa`…`az`), **not** a counter — see
+`json-schema.md` for why `a10` breaks the file.
 
 ```json
 {
@@ -93,7 +95,7 @@ Colored background, great for evidence artifacts, callouts, quotes.
   "growY": 0,
   "url": "",
   "scale": 1,
-  "fontSizeAdjustment": 0,
+  "fontSizeAdjustment": 1,
   "textFirstEditedBy": null,
   "richText": {
     "type": "doc",
@@ -102,7 +104,13 @@ Colored background, great for evidence artifacts, callouts, quotes.
 }
 ```
 
-- `textFirstEditedBy`: required prop (set to `null` for hand-authored notes).
+- **`fontSizeAdjustment` must be `1`, never `0`.** It is a scale factor, not a pixel size.
+  tldraw computes it in `onBeforeCreate` when you draw a note interactively; loading a finished
+  file skips that, so a stored `0` scales the label to zero and the note renders **blank** —
+  with its text still sitting in the JSON, which makes this maddening to debug.
+- `textFirstEditedBy`: set to `null` for hand-authored notes. Current tldraw calls this prop
+  `textLastEditedBy`; the migration renames it on import, so either spelling works as long as
+  it matches the `com.tldraw.shape.note` sequence number your file declares.
 - Notes are always ~200×200 in tldraw — size is controlled by the `size` token, not `w`/`h`.
 
 ---
@@ -164,7 +172,8 @@ Use for timelines, tree trunks, structural lines (not arrows).
 ```
 
 **`spline`**: `line` (polyline) or `cubic` (smooth curve).
-Points are keyed by id; each needs a unique `index` (`"a1"`, `"a2"`, ...) for order.
+Points are keyed by id; each needs a unique `index` for order — same fractional-index rules as
+shapes (`a1`…`a9`, then `aA`…`aZ`, never ending in `0`).
 
 ---
 

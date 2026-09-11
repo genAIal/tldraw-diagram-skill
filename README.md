@@ -38,13 +38,30 @@ uv sync
 uv run playwright install chromium
 ```
 
-### 3. Render a diagram
+### 3. Validate the file
+
+```bash
+cd path/to/tldraw-skill/references
+uv run python validate_tldr.py path/to/diagram.tldr   # or plain: python3 validate_tldr.py ...
+```
+
+Pure standard library — works without the renderer setup above. Run it before rendering. It catches the faults that make tldraw **silently** refuse a file —
+invalid index keys, notes with `fontSizeAdjustment: 0`, bindings pointing nowhere. When such a
+file is opened, tldraw shows an empty canvas and no error at all, while the PNG below still
+looks perfect. Exit code 1 means errors.
+
+### 4. Render a diagram
 
 ```bash
 cd path/to/tldraw-skill/references
 uv run python render_tldraw.py path/to/diagram.tldr
 # -> writes path/to/diagram.png
 ```
+
+**The PNG is not an import test.** The renderer runs tldraw v3 and builds the document through
+`editor.createShapes`, a path that skips the validation tldraw.com applies when importing a
+file. A clean render says the layout is right, not that the file opens. See SKILL.md,
+*Validate against the target*.
 
 Needs network access to [esm.sh](https://esm.sh) on first run; subsequent runs use Chromium's HTTP cache.
 
@@ -60,6 +77,7 @@ tldraw/
     color-palette.md               # tldraw's semantic color tokens
     shape-templates.md             # Copy-paste templates per shape type
     json-schema.md                 # .tldr file format reference
+    validate_tldr.py               # Static .tldr checks — run before rendering
     render_template.html           # Headless harness: tldraw via esm.sh
     render_tldraw.py               # Playwright-based .tldr -> PNG renderer
     render_svg.py                  # Same harness, exports SVG (vector) instead
